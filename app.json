@@ -9,7 +9,10 @@
     "userInterfaceStyle": "dark",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.frequencyvisualizer.app"
+      "bundleIdentifier": "com.hunterawsome1243.frequencyvisualizer",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -24,7 +27,7 @@
         "android.permission.ACCESS_WIFI_STATE",
         "android.permission.CHANGE_WIFI_STATE"
       ],
-      "package": "com.frequencyvisualizer.app"
+      "package": "com.hunterawsome1243.frequencyvisualizer"
     },
     "web": {
       "output": "server",

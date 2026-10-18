@@ -91,6 +91,7 @@ Goal: Someone else can install it and use it.
 - [ ] Build a preview with EAS and install it on your phone (M) <!-- id:th3rer5nwp97 -->
   Notes: Ask Claude for the eas build steps. On Android you can install the build directly. On an iPhone this needs a paid Apple Developer account, and each iPhone has to be added with eas device:create before the build. Check: the installed app opens without Expo Go.
   Notes: eas.json is ready (2026-10-18); waiting for you to run the build and install it.
+  Notes: 2026-10-18: the iPhone steps, including the preview build and fixes for install problems, are in README.md. The app ID is now com.hunterawsome1243.frequencyvisualizer (iOS and Android); change it in app.json before the first build if you want another one, because changing it later means new signing credentials.
 - [ ] Let testers install it with TestFlight or Google Play internal testing (M) <!-- id:twpgwa7lwp97 -->
   Notes: Ask Claude for the eas submit steps for the store you use. Check: a tester installs it from their invite.
   Notes: Waiting for you: needs the preview build and a store account.

@@ -30,7 +30,7 @@ Everything stays on your phone. There's no account, no server and no analytics: 
 ## Requirements
 
 - [Node.js](https://nodejs.org) 22 LTS (22.13+), 24 LTS (24.3+) or 26+
-- A real Android phone or iPhone (simulators and emulators have no Bluetooth to scan)
+- A real Android phone, or an iPhone on iOS 16.4 or later (iPhone 8 or newer). Simulators and emulators have no Bluetooth to scan.
 - A free [Expo account](https://expo.dev/signup), used to build the app with EAS
 - For iPhone builds: a paid [Apple Developer](https://developer.apple.com/programs/) membership
 
@@ -59,15 +59,33 @@ Expo Go only contains a fixed set of native libraries, and the Bluetooth library
 
 ### iPhone
 
-This needs a paid Apple Developer account, and each iPhone has to be registered before the build.
+This needs a paid Apple Developer account, and each iPhone has to be registered before the build. The development build loads the app from your computer while you work on it; to use the app on its own, see [Use it without your computer](#use-it-without-your-computer) below.
 
 1. Log in to Expo: `npx expo login`
-2. Register your iPhone: `npx eas-cli device:create`, then open the link on the iPhone and install the profile it offers.
-3. Build: `npx eas-cli build --profile development --platform ios` and sign in with your Apple account when asked.
-4. Open the build link on the iPhone to install it. If iOS asks, turn on Developer Mode in Settings > Privacy & Security.
-5. Run `npx expo start` and open the app on the iPhone, as in step 4 for Android.
+2. Register your iPhone: `npx eas-cli device:create`. The first time, it asks to create an EAS project (say yes; this adds a project ID to `app.json`). Sign in with your Apple ID and two-factor code, and pick your team if asked. Choose **Website**, open the link it shows in Safari on the iPhone and tap Download. Then open the Settings app, tap **Profile Downloaded** and then **Install**.
+3. Build: `npx eas-cli build --profile development --platform ios`. Say yes when it asks to log in to your Apple account. EAS then makes the signing certificate and provisioning profile for you, and shows a device list with your iPhone already ticked: press Return.
+4. When the build is done, scan the QR code in the terminal with the iPhone Camera (or open the build link in Safari) and tap Install. If iOS asks, turn on Developer Mode in Settings > Privacy & Security.
+5. Run `npx expo start` and open the app on the iPhone, as in step 4 for Android. When iOS asks to let it find devices on your local network, tap Allow.
 
-Added a new iPhone? Run `device:create` again, then rebuild.
+If the build warns "Failed to provision ... of the selected devices" and asks whether to continue, choose No. Apple is still processing your iPhone (you can see it at [developer.apple.com/account/resources/devices/list](https://developer.apple.com/account/resources/devices/list)), so run the build again later. Choosing Yes gives a build that won't install on that iPhone.
+
+Added a new iPhone? Run `npx eas-cli device:create` and register it, then run the same build command again. When EAS says the profile is missing devices and asks to choose devices again, answer Yes, press Space to tick the new iPhone, then press Return.
+
+#### Use it without your computer
+
+The development build can't show the app unless `npx expo start` is running. For an app that works on its own, build the preview profile instead:
+
+```sh
+npx eas-cli build --profile preview --platform ios
+```
+
+Install it the same way as step 4, on an iPhone you've already registered. It scans without your computer. It's a snapshot of the code, so make a new build when you change something. It uses the same app ID as the development build, so installing one replaces the other: reinstall the development build when you want live reloading again.
+
+#### If it won't install or connect
+
+- **"Unable to Install" or "integrity could not be verified":** that iPhone isn't in the build. Register it and build again, ticking it (see "Added a new iPhone?" above).
+- **The app opens but shows no computer to connect to:** turn on Settings > Privacy & Security > Local Network > Frequency Visualizer. Keep the phone and computer on the same Wi-Fi, or use `npx expo start --tunnel`.
+- **EAS says the bundle identifier is not available:** change `ios.bundleIdentifier` in `app.json` to something unique, such as `com.yourname.frequencyvisualizer`, and build again.
 
 ### Expo Go (screens only)
 
@@ -81,9 +99,10 @@ A preview build is a standalone app that doesn't need your computer running:
 
 ```sh
 npx eas-cli build --profile preview --platform android
+npx eas-cli build --profile preview --platform ios
 ```
 
-On Android, anyone with the link can install the APK. On iPhone (`--platform ios`), each tester's iPhone must be registered with `npx eas-cli device:create` before you build.
+On Android, anyone with the link can install the APK. On iPhone, each tester's iPhone must be registered with `npx eas-cli device:create` before you build, and ticked in the device list during the build.
 
 ### TestFlight and Google Play internal testing
 
