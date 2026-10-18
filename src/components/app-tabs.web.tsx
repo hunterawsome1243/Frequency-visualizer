@@ -6,26 +6,30 @@ import {
   TabTriggerSlotProps,
   TabListProps,
 } from 'expo-router/ui';
-import { SymbolView } from 'expo-symbols';
-import { Pressable, useColorScheme, View, StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import { Colors, MaxContentWidth, Spacing } from '@/constants/theme';
+import { glow, MaxContentWidth, Neon, Spacing } from '@/constants/theme';
 
-import { ExternalLink } from './external-link';
-import { ThemedText } from './themed-text';
-import { ThemedView } from './themed-view';
+/** Below this width the brand name is hidden so the four tabs fit on one line. */
+const BRAND_MIN_WIDTH = 560;
 
 export default function AppTabs() {
   return (
     <Tabs>
-      <TabSlot style={{ height: '100%' }} />
+      <TabSlot style={styles.slot} />
       <TabList asChild>
         <CustomTabList>
-          <TabTrigger name="home" href="/" asChild>
-            <TabButton>Home</TabButton>
+          <TabTrigger name="index" href="/" asChild>
+            <TabButton>Radar</TabButton>
           </TabTrigger>
-          <TabTrigger name="explore" href="/explore" asChild>
-            <TabButton>Explore</TabButton>
+          <TabTrigger name="devices" href="/devices" asChild>
+            <TabButton>Devices</TabButton>
+          </TabTrigger>
+          <TabTrigger name="wifi" href="/wifi" asChild>
+            <TabButton>Wi-Fi</TabButton>
+          </TabTrigger>
+          <TabTrigger name="about" href="/about" asChild>
+            <TabButton>About</TabButton>
           </TabTrigger>
         </CustomTabList>
       </TabList>
@@ -33,49 +37,44 @@ export default function AppTabs() {
   );
 }
 
-export function TabButton({ children, isFocused, ...props }: TabTriggerSlotProps) {
+// TabTrigger passes no ref through its Slot, and the slot's View-typed ref does not fit Pressable.
+export type TabButtonProps = Omit<TabTriggerSlotProps, 'ref'>;
+
+export function TabButton({ children, isFocused, ...props }: TabButtonProps) {
   return (
-    <Pressable {...props} style={({ pressed }) => pressed && styles.pressed}>
-      <ThemedView
-        type={isFocused ? 'backgroundSelected' : 'backgroundElement'}
-        style={styles.tabButtonView}>
-        <ThemedText type="small" themeColor={isFocused ? 'text' : 'textSecondary'}>
+    <Pressable
+      {...props}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: isFocused }}
+      style={({ pressed }) => pressed && styles.pressed}>
+      <View style={[styles.tabButtonView, isFocused && [styles.tabButtonFocused, glow(Neon.cyan, 6)]]}>
+        <Text style={[styles.tabLabel, { color: isFocused ? Neon.cyan : Neon.textSecondary }]}>
           {children}
-        </ThemedText>
-      </ThemedView>
+        </Text>
+      </View>
     </Pressable>
   );
 }
 
 export function CustomTabList(props: TabListProps) {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'dark' ? 'dark' : 'light'];
+  const { width } = useWindowDimensions();
 
   return (
     <View {...props} style={styles.tabListContainer}>
-      <ThemedView type="backgroundElement" style={styles.innerContainer}>
-        <ThemedText type="smallBold" style={styles.brandText}>
-          Expo Starter
-        </ThemedText>
+      <View style={styles.innerContainer}>
+        {width >= BRAND_MIN_WIDTH && <Text style={styles.brandText}>Frequency Visualizer</Text>}
 
         {props.children}
-
-        <ExternalLink href="https://docs.expo.dev" asChild>
-          <Pressable style={styles.externalPressable}>
-            <ThemedText type="link">Docs</ThemedText>
-            <SymbolView
-              tintColor={colors.text}
-              name={{ ios: 'arrow.up.right.square', web: 'link' }}
-              size={12}
-            />
-          </Pressable>
-        </ExternalLink>
-      </ThemedView>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  slot: {
+    height: '100%',
+    backgroundColor: Neon.background,
+  },
   tabListContainer: {
     position: 'absolute',
     width: '100%',
@@ -86,16 +85,27 @@ const styles = StyleSheet.create({
   },
   innerContainer: {
     paddingVertical: Spacing.two,
-    paddingHorizontal: Spacing.five,
+    paddingHorizontal: Spacing.four,
     borderRadius: Spacing.five,
+    borderWidth: 1,
+    borderColor: Neon.border,
+    backgroundColor: Neon.surface,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     flexGrow: 1,
     gap: Spacing.two,
     maxWidth: MaxContentWidth,
   },
   brandText: {
     marginRight: 'auto',
+    color: Neon.cyan,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: 700,
+    letterSpacing: 0.5,
+    textShadowColor: Neon.cyan,
+    textShadowRadius: 8,
   },
   pressed: {
     opacity: 0.7,
@@ -104,12 +114,16 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one,
     paddingHorizontal: Spacing.three,
     borderRadius: Spacing.three,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
-  externalPressable: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: Spacing.one,
-    marginLeft: Spacing.three,
+  tabButtonFocused: {
+    backgroundColor: Neon.surfaceRaised,
+    borderColor: Neon.cyan,
+  },
+  tabLabel: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: 600,
   },
 });

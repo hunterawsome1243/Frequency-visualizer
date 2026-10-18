@@ -19,7 +19,18 @@ export interface RssiSample {
   rssi: number;
 }
 
-export type TrackerType = 'airtag' | 'find-my' | 'tile' | 'smarttag' | 'chipolo';
+/**
+ * 'find-my' is a non-AirTag device on Apple's Find My network, 'find-hub' one on Google's Find Hub
+ * network, and 'unknown-tracker' a tracker that only shows the cross-brand unwanted-tracking signal.
+ */
+export type TrackerType =
+  | 'airtag'
+  | 'find-my'
+  | 'tile'
+  | 'smarttag'
+  | 'chipolo'
+  | 'find-hub'
+  | 'unknown-tracker';
 
 export interface TrackerMatch {
   type: TrackerType;

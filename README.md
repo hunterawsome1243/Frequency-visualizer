@@ -1,56 +1,119 @@
-# Welcome to your Expo app 👋
+# Frequency Visualizer
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A phone app that makes nearby wireless signals visible. It scans for Bluetooth devices (and Wi-Fi networks on Android), shows them as dots on a live neon radar, and points out devices that might be trackers, such as AirTags or Tiles.
 
-## Get started
+Built with Expo (React Native) and TypeScript.
 
-1. Install dependencies
+## What it does
 
-   ```bash
-   npm install
-   ```
+- **Bluetooth scan:** lists nearby Bluetooth Low Energy devices with their name (if they send one), ID and signal strength (RSSI).
+- **Live radar:** each device is a dot. The stronger its signal, the closer it sits to the centre.
+- **Possible trackers:** devices whose Bluetooth data looks like an AirTag, another Find My accessory, a Tile, a Samsung SmartTag, a Chipolo or a Google Find Hub tag get a clear warning label.
+- **Device details:** tap a device to see a rough proximity (near, medium or far) and a small chart of its signal strength over time.
+- **Sorting, filters and nicknames:** sort by signal or name, show only trackers or named devices, and give a device a nickname (like "my headphones") that the phone remembers.
+- **Wi-Fi networks (Android only):** nearby networks with their signal strength and channel.
 
-2. Start the app
+## What it can't do
 
-   ```bash
-   npx expo start
-   ```
+We'd rather be honest than impressive:
 
-In the output, you'll find options to open the app in a
+- **It doesn't measure the electromagnetic spectrum.** A phone can only hear what its own Bluetooth and Wi-Fi radios pick up. Radio stations, microwave ovens, mobile networks, power lines and every other kind of EM wave are invisible to it.
+- **Signal strength is a hint, not a distance.** Walls, bodies, pockets and phone cases all change it a lot, so "near" and "far" are rough guesses.
+- **Tracker detection is best effort.** It guesses from the data devices broadcast over Bluetooth. It can miss trackers (for example ones that are switched off or change how they advertise) and it can flag harmless devices. "Possible tracker" never means "definitely a tracker". On iPhone, iOS hides the Bluetooth data that marks AirTags and other Find My devices from apps, so the app usually can't spot those there; Tile, SmartTag, Chipolo and Google Find Hub tags can still show up. If you think someone is tracking you, also use your phone's built-in unknown tracker alerts, and contact the police if you feel unsafe.
+- **Wi-Fi scanning is Android only.** iOS doesn't let apps scan for Wi-Fi networks. Android also limits how often an app may scan (about 4 times every 2 minutes) and needs Location turned on.
+- **Bluetooth scanning needs a development build** on a real phone. It doesn't work in Expo Go, a simulator or a web browser (see below).
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Privacy
 
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+Everything stays on your phone. There's no account, no server and no analytics: scan results are never uploaded, and nicknames are saved only on the device. Android asks for Location permission because Bluetooth and Wi-Fi scans could reveal where you are, but the app never reads your GPS position.
 
-## Get a fresh project
+## Requirements
 
-When you're ready, run:
+- [Node.js](https://nodejs.org) 22.13 or newer (or 24.3+)
+- A real Android phone or iPhone (simulators and emulators have no Bluetooth to scan)
+- A free [Expo account](https://expo.dev/signup), used to build the app with EAS
+- For iPhone builds: a paid [Apple Developer](https://developer.apple.com/programs/) membership
 
-```bash
-npm run reset-project
+## Install and test
+
+```sh
+npm install
+npm test
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+Use `npx jest --watch` to re-run tests while you work.
 
-### Other setup steps
+## Run it on your phone
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+### Why a development build?
 
-## Learn more
+Expo Go only contains a fixed set of native libraries, and the Bluetooth library this app uses (`react-native-ble-plx`) isn't one of them. A development build is your own version of Expo Go with this app's native code built in. You make it once, and again only when native libraries or native settings in `app.json` change. After that, your code changes load live from your computer, just like in Expo Go.
 
-To learn more about developing your project with Expo, look at the following resources:
+### Android
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+1. Log in to Expo: `npx expo login`
+2. Build: `npx eas-cli build --profile development --platform android`
+   The first time, it asks to create an EAS project (this adds a project ID to `app.json`) and a signing key. Say yes to both.
+3. When the build is done, open its link (or scan the QR code) on your phone, download the APK and install it. Allow installs from your browser if Android asks.
+4. On your computer run `npx expo start`. Open the Frequency Visualizer app on your phone and pick your computer from the list, or scan the QR code. The phone and computer need to be on the same Wi-Fi; if they aren't, use `npx expo start --tunnel`.
 
-## Join the community
+### iPhone
 
-Join our community of developers creating universal apps.
+This needs a paid Apple Developer account, and each iPhone has to be registered before the build.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+1. Log in to Expo: `npx expo login`
+2. Register your iPhone: `npx eas-cli device:create`, then open the link on the iPhone and install the profile it offers.
+3. Build: `npx eas-cli build --profile development --platform ios` and sign in with your Apple account when asked.
+4. Open the build link on the iPhone to install it. If iOS asks, turn on Developer Mode in Settings > Privacy & Security.
+5. Run `npx expo start` and open the app on the iPhone, as in step 4 for Android.
+
+Added a new iPhone? Run `device:create` again, then rebuild.
+
+### Expo Go (screens only)
+
+The app still opens in [Expo Go](https://expo.dev/go), so you can look around the screens, but it can't scan there. Because `expo-dev-client` is installed, `npx expo start` aims at the development build: press `s` in the terminal to switch to Expo Go, then scan the QR code. On an iPhone, log in to the same Expo account in Expo Go.
+
+## Share it with testers
+
+### Preview builds
+
+A preview build is a standalone app that doesn't need your computer running:
+
+```sh
+npx eas-cli build --profile preview --platform android
+```
+
+On Android, anyone with the link can install the APK. On iPhone (`--platform ios`), each tester's iPhone must be registered with `npx eas-cli device:create` before you build.
+
+### TestFlight and Google Play internal testing
+
+1. Make a store build: `npx eas-cli build --profile production --platform ios` (or `android`). The build number goes up automatically.
+2. Upload it: `npx eas-cli submit --platform ios` (or `android`).
+   - **iPhone:** the build goes to App Store Connect. Add testers in TestFlight.
+   - **Android:** you need a Google Play Console account with the app created in it, and a service account key for EAS. The very first upload has to be done by hand in Play Console. Then invite testers under Internal testing.
+
+Guides: [development builds](https://docs.expo.dev/develop/development-builds/create-a-build/), [internal distribution](https://docs.expo.dev/build/internal-distribution/), [submit to the App Store](https://docs.expo.dev/submit/ios/), [submit to Google Play](https://docs.expo.dev/submit/android/).
+
+## Project structure
+
+```
+src/app/            Screens, one file per route (Expo Router)
+  (tabs)/           Radar, Devices, Wi-Fi and About tabs
+  device/[id].tsx   Device detail screen
+src/lib/            Logic that isn't about screens: scanning, tracker detection,
+                    proximity, sorting, nicknames. Tests live in __tests__.
+src/components/     Reusable UI: radar, device rows, signal chart, badges
+src/context/        Shared state for scan results and nicknames
+src/hooks/          Hooks such as the Bluetooth scan hook
+src/constants/      The dark neon theme
+assets/             Icons and splash screen
+scripts/            make-icons.py redraws every icon (Python 3 + Pillow)
+app.json            App settings: name, permissions, icons, Bluetooth plugin
+eas.json            EAS build profiles: development, preview, production
+```
+
+To change the icon, edit `scripts/make-icons.py` and run `python3 scripts/make-icons.py`.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
