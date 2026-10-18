@@ -136,7 +136,7 @@ describe('Wi-Fi tab', () => {
     expect(screen.getByText('Wi-Fi scanning needs a development build')).toBeOnTheScreen();
   });
 
-  test('waits for a tap, then scans and lists networks strongest first', async () => {
+  test('waits for a tap, then scans and lists networks in the order scanWifi returns', async () => {
     const scan = deferred();
     mockScanWifi.mockReturnValue(scan.promise);
     await render(<WifiScreen />);
@@ -155,7 +155,10 @@ describe('Wi-Fi tab', () => {
     });
 
     expect(await screen.findByText('Neighbour')).toBeOnTheScreen();
-    expect(screen.getByText('Home')).toBeOnTheScreen();
+    expect(screen.getAllByText(/^(Home|Neighbour)$/).map((node) => node.props.children)).toEqual([
+      'Home',
+      'Neighbour',
+    ]);
     expect(screen.getByText(/^2 networks · Updated /)).toBeOnTheScreen();
     expect(screen.getByRole('button', { name: 'Scan again' })).toBeOnTheScreen();
     expect(screen.queryByTestId('wifi-cached-note')).toBeNull();

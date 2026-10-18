@@ -68,10 +68,11 @@ describe('recentSamples', () => {
   });
 
   it('caps at CHART_MAX_SAMPLES by default', () => {
-    const history = Array.from({ length: 100 }, (_, i) => ({ t: i, rssi: -60 }));
+    const total = CHART_MAX_SAMPLES + 40;
+    const history = Array.from({ length: total }, (_, i) => ({ t: i, rssi: -60 }));
     const recent = recentSamples(history);
     expect(recent).toHaveLength(CHART_MAX_SAMPLES);
-    expect(recent[0].t).toBe(100 - CHART_MAX_SAMPLES);
+    expect(recent[0].t).toBe(total - CHART_MAX_SAMPLES);
   });
 
   it('gives nothing for a limit of 0', () => {
@@ -126,11 +127,12 @@ describe('buildChartPath', () => {
   });
 
   it('only draws the newest samples', () => {
-    const history = Array.from({ length: 80 }, (_, i) => ({ t: i * 1000, rssi: -60 }));
+    const total = CHART_MAX_SAMPLES + 20;
+    const history = Array.from({ length: total }, (_, i) => ({ t: i * 1000, rssi: -60 }));
     const { points } = buildChartPath(history, 300, 100, RANGE);
     expect(points).toHaveLength(CHART_MAX_SAMPLES);
     expect(points[0]).toMatchObject({ x: 0, t: 20_000 });
-    expect(points[points.length - 1]).toMatchObject({ x: 300, t: 79_000 });
+    expect(points[points.length - 1]).toMatchObject({ x: 300, t: (total - 1) * 1000 });
 
     expect(buildChartPath(history, 300, 100, RANGE, { maxSamples: 2 }).points).toHaveLength(2);
   });

@@ -11,6 +11,8 @@ import { StateView } from '@/components/state-view';
 import { MaxContentWidth, Neon, Spacing } from '@/constants/theme';
 import { useNicknames } from '@/context/nicknames-context';
 import { useScan } from '@/context/scan-context';
+import { useFrozenWhileBlurred } from '@/hooks/use-frozen-while-blurred';
+import { blePermissionNote } from '@/lib/scanner';
 import { filterDevices, sortDevices } from '@/lib/sort-filter';
 import type { DeviceFilter, ScanStatus, SortBy } from '@/lib/types';
 
@@ -39,10 +41,11 @@ function EmptyState(props: { status: ScanStatus; hasDevices: boolean; onShowAll:
     );
   }
   if (status === 'idle') {
+    const permissionNote = blePermissionNote();
     return (
       <StateView
         title="Tap Start scan to look for nearby Bluetooth devices"
-        message="Scanning stays on your phone. Nothing is uploaded."
+        message={`Scanning stays on your phone. Nothing is uploaded.${permissionNote ? ` ${permissionNote}` : ''}`}
       />
     );
   }
@@ -51,7 +54,10 @@ function EmptyState(props: { status: ScanStatus; hasDevices: boolean; onShowAll:
 }
 
 export default function DevicesScreen() {
-  const { devices, status } = useScan();
+  const scan = useScan();
+  const { status } = scan;
+  // Tabs stay mounted: while hidden, the list keeps its last contents instead of re-sorting every update.
+  const devices = useFrozenWhileBlurred(scan.devices);
   const { nicknames } = useNicknames();
   const router = useRouter();
   const insets = useSafeAreaInsets();

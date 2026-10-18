@@ -4,6 +4,7 @@ import { ActivityIndicator, Linking, Platform, StyleSheet, Text, View } from 're
 import { ActionButton } from '@/components/state-view';
 import { glow, Neon, Spacing } from '@/constants/theme';
 import { useScan } from '@/context/scan-context';
+import { LOCATION_OFF_MESSAGE } from '@/lib/scanner';
 import type { ScanStatus } from '@/lib/types';
 
 export const PERMISSION_DENIED_FALLBACK =
@@ -37,6 +38,12 @@ export function describeScanStatus(status: ScanStatus): { label: string; color: 
 export function openAppSettings(): void {
   if (Platform.OS === 'web') return;
   Linking.openSettings().catch(() => undefined);
+}
+
+/** Opens Android's Location settings page; falls back to this app's page if that fails. Android only. */
+export function openLocationSettings(): void {
+  if (Platform.OS !== 'android') return;
+  Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS').catch(openAppSettings);
 }
 
 interface CardAction {
@@ -73,7 +80,7 @@ export function ScanStatusCard(): ReactNode {
       return (
         <Card
           color={Neon.amber}
-          title="Bluetooth permission needed"
+          title="Permission needed"
           message={message ?? PERMISSION_DENIED_FALLBACK}
           actions={[
             ...(Platform.OS === 'web' ? [] : [{ label: 'Open settings', onPress: openAppSettings }]),
@@ -100,6 +107,20 @@ export function ScanStatusCard(): ReactNode {
         />
       );
     case 'error':
+      // Android refuses to scan for Bluetooth devices while Location is off, so retrying alone won't help.
+      if (message === LOCATION_OFF_MESSAGE) {
+        return (
+          <Card
+            color={Neon.amber}
+            title="Location is turned off"
+            message={message}
+            actions={[
+              { label: 'Open location settings', onPress: openLocationSettings },
+              { label: 'Try again', onPress: retry, variant: 'secondary' },
+            ]}
+          />
+        );
+      }
       return (
         <Card
           color={Neon.danger}

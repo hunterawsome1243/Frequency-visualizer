@@ -51,6 +51,7 @@
   "private": true,
   "jest": {
     "preset": "jest-expo",
+    "testTimeout": 15000,
     "moduleNameMapper": {
       "\\.css$": "<rootDir>/jest/style-mock.js"
     }

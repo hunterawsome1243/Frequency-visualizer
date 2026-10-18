@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { Linking } from 'react-native';
+import { Linking, Platform } from 'react-native';
 
 import {
   BLUETOOTH_OFF_FALLBACK,
@@ -10,6 +10,7 @@ import {
 } from '@/components/scan-status-card';
 import { useScan } from '@/context/scan-context';
 import type { BleScanState } from '@/hooks/use-ble-scan';
+import { LOCATION_OFF_MESSAGE } from '@/lib/scanner';
 import type { ScanStatus } from '@/lib/types';
 
 jest.mock('@/context/scan-context', () => ({ useScan: jest.fn() }));
@@ -33,6 +34,10 @@ function mockScan(overrides: Partial<BleScanState> = {}): BleScanState {
 
 beforeEach(() => {
   mockUseScan.mockReset();
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 test.each<ScanStatus>(['idle', 'scanning'])('renders nothing while %s', async (status) => {
@@ -59,7 +64,7 @@ test('permission denied offers Settings and a retry', async () => {
   });
   await render(<ScanStatusCard />);
 
-  expect(screen.getByText('Bluetooth permission needed')).toBeOnTheScreen();
+  expect(screen.getByText('Permission needed')).toBeOnTheScreen();
   expect(
     screen.getByText('Bluetooth access is turned off for this app. You can allow it in Settings.'),
   ).toBeOnTheScreen();
@@ -122,6 +127,23 @@ test('an error shows the message and a retry that does not throw when start fail
 
   await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
   expect(start).toHaveBeenCalledTimes(1);
+});
+
+test('Location off offers Location settings as well as a retry', async () => {
+  jest.replaceProperty(Platform, 'OS', 'android');
+  const sendIntent = jest.spyOn(Linking, 'sendIntent').mockResolvedValue(undefined);
+  const state = mockScan({ status: 'error', message: LOCATION_OFF_MESSAGE });
+  await render(<ScanStatusCard />);
+
+  expect(screen.getByText('Location is turned off')).toBeOnTheScreen();
+  expect(screen.getByText(LOCATION_OFF_MESSAGE)).toBeOnTheScreen();
+  expect(screen.queryByText('Scan stopped')).toBeNull();
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Open location settings' }));
+  expect(sendIntent).toHaveBeenCalledWith('android.settings.LOCATION_SOURCE_SETTINGS');
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+  expect(state.start).toHaveBeenCalledTimes(1);
 });
 
 test('describeScanStatus gives every status a plain label', () => {

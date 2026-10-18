@@ -32,11 +32,19 @@ export const ProximityColors = {
   unknown: Neon.textSecondary,
 } as const;
 
-/** Soft glow around neon elements. iOS uses shadows; Android only supports elevation, so it gets none. */
+/** "#RRGGBB" at 80% opacity, matching the iOS shadow's opacity; other colour formats are used as they are. */
+function glowColor(color: string): string {
+  return /^#[0-9a-f]{6}$/i.test(color) ? `${color}CC` : color;
+}
+
+/**
+ * Soft glow around neon elements. iOS uses shadows; Android (9 and newer, older versions draw none)
+ * and the web use boxShadow.
+ */
 export function glow(color: string, radius = 8) {
   return Platform.select({
     ios: { shadowColor: color, shadowOpacity: 0.8, shadowRadius: radius, shadowOffset: { width: 0, height: 0 } },
-    default: {},
+    default: { boxShadow: `0 0 ${radius}px ${glowColor(color)}` },
   });
 }
 

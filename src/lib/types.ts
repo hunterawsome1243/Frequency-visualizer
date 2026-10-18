@@ -47,11 +47,14 @@ export interface ScannedDevice {
   id: string;
   /** Best name we have: advertised local name, else the device name, else null. */
   name: string | null;
-  /** Latest RSSI in dBm, or null if the last advertisement had none. */
+  /**
+   * Recent RSSI in dBm: the mean of the last few seconds of readings, so it does not jump with every
+   * packet. Falls back to the latest usable reading, or null if none has been received yet.
+   */
   rssi: number | null;
   firstSeen: number;
   lastSeen: number;
-  /** Oldest first, capped in length by the device-list helper. */
+  /** Oldest first, at most about one sample per second, capped in length by the device-list helper. */
   rssiHistory: RssiSample[];
   /** The latest advertisement, kept for the detail screen and tracker detection. */
   advertisement: Advertisement;

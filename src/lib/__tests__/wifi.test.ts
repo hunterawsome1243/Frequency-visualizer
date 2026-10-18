@@ -43,6 +43,7 @@ describe('frequencyToChannel', () => {
   });
 
   it.each([
+    [5935, 2],
     [5955, 1],
     [5975, 5],
     [6115, 33],
@@ -72,6 +73,7 @@ describe('frequencyToBand', () => {
     [2484, '2.4 GHz'],
     [5160, '5 GHz'],
     [5885, '5 GHz'],
+    [5935, '6 GHz'],
     [5955, '6 GHz'],
     [7115, '6 GHz'],
   ] as const)('%p MHz is %p', (frequency, band) => {
@@ -107,7 +109,7 @@ describe('toWifiNetworks', () => {
     expect(network.band).toBe('unknown');
   });
 
-  it.each(['', '   ', '<unknown ssid>', '<UNKNOWN SSID>', '\u0000\u0000\u0000'])(
+  it.each(['', '   ', '<unknown ssid>', '<UNKNOWN SSID>', '(hidden SSID)', '\u0000\u0000\u0000'])(
     'shows %p as a hidden network',
     (ssid) => {
       expect(toWifiNetworks([entry({ SSID: ssid })])[0].ssid).toBe(HIDDEN_NETWORK_LABEL);

@@ -20,14 +20,17 @@ import type { Advertisement, TrackerMatch, TrackerType } from './types';
  *   each [type][length][payload]. Type 0x12 is Find My (offline finding). Payload length 0x19 is
  *   the full public key, sent while separated from the owner; length 0x02 is the short "near
  *   owner" form. The first payload byte is the status byte: bits 4-5 give the device kind
- *   (0 Apple device, 1 AirTag, 2 Find My accessory from another brand, 3 AirPods).
+ *   (0 Apple device, 1 AirTag, 2 Find My accessory: other brands' trackers, but also 2nd-gen
+ *   AirTags and some AirPods, which AirGuard only tells apart by connecting, 3 AirPods).
  * - Type 0x07 is Proximity Pairing: [prefix][model hi][model lo]... Model 0x0055 (AirTag) or
  *   0x0030 (Hermes AirTag) is what an AirTag sends before it has been set up.
  * - DULT: service data 0xFCB2 = [network id][near-owner byte, bit 0 set = near owner][...].
  *   Network id 0x01 is Apple Find My, 0x02 Google Find Hub.
  * - Google Find Hub: Eddystone service data 0xFEAA whose frame type is 0x40, or 0x41 when the
- *   tracker is in its "unwanted tracking protection" mode, i.e. away from its owner. Other
- *   Eddystone frames (0x00 UID, 0x10 URL, 0x20 TLM, 0x30 EID) are ordinary beacons.
+ *   tracker is in its "unwanted tracking protection" mode, i.e. away from its owner. Frame 0x40
+ *   is also sent by offline Android phones (AirGuard tells them apart only by the AD Flags byte),
+ *   so only 0x41 is tag-specific. Other Eddystone frames (0x00 UID, 0x10 URL, 0x20 TLM, 0x30 EID)
+ *   are ordinary beacons.
  * - Samsung SmartTag: service 0xFD5A. The low 3 bits of the first service-data byte are the
  *   owner-connection state: 1, 2 or 3 mean offline from the owner (from minutes to over a day).
  * - Tile: 0xFEED is what AirGuard matches; 0xFEEC and 0xFD84 are also registered to Tile, Inc.
@@ -189,7 +192,8 @@ function detectAppleFindMy(ad: ParsedAdvertisement): TrackerMatch | null {
       return match(
         'find-my',
         confidence,
-        `Apple Find My broadcast from a tracker made by another brand, ${where}.`,
+        'Apple Find My broadcast from a Find My accessory, such as a newer AirTag, AirPods or ' +
+          `another brand's tracker, ${where}.`,
       );
     case FIND_MY_KIND_AIRPODS:
       if (!away) return null;
@@ -256,7 +260,8 @@ function detectFindHub(ad: ParsedAdvertisement): TrackerMatch | null {
     return match(
       'find-hub',
       'possible',
-      'Google Find Hub broadcast from a tracker that was near its owner recently.',
+      'Google Find Hub broadcast. It may be a tracker that was near its owner recently, or an ' +
+        'offline Android phone or other Find Hub device.',
     );
   }
   return null;

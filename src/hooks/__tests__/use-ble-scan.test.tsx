@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
+import { AppState, type AppStateStatus, Platform } from 'react-native';
 
 import {
   type BleScanOptions,
@@ -86,6 +87,7 @@ beforeEach(() => {
 
 afterEach(() => {
   jest.useRealTimers();
+  jest.restoreAllMocks();
 });
 
 test('starts idle with no devices', async () => {
@@ -190,6 +192,25 @@ test('a denied permission explains why it is needed and does not scan', async ()
   expect(result.current.message).toBe(PERMISSION_DENIED_MESSAGE);
   expect(PERMISSION_DENIED_MESSAGE).toBe('Bluetooth permission is needed to see nearby devices.');
   expect(fake.started).toBe(false);
+});
+
+test('on Android a denied permission names Nearby devices and Location, not only Bluetooth', async () => {
+  jest.replaceProperty(Platform, 'OS', 'android');
+  const version = jest.spyOn(Platform as { Version: number }, 'Version', 'get').mockReturnValue(33);
+  const fake = createFakeScanner('denied');
+  const { result } = await renderScan(fake);
+  await act(() => result.current.start());
+  expect(result.current.status).toBe('permission-denied');
+  expect(result.current.message).toBe(
+    "Allow Nearby devices and precise Location so Android lets the app scan for Bluetooth devices. The app doesn't save your location.",
+  );
+
+  fake.permissionResult = 'blocked';
+  version.mockReturnValue(30);
+  await act(() => result.current.start());
+  expect(result.current.message).toBe(
+    "To scan, allow Location for this app in Settings, then try again. The app doesn't save your location.",
+  );
 });
 
 test('a blocked permission points to Settings', async () => {
@@ -362,4 +383,159 @@ test('shows the unsupported message from the scanner', async () => {
   await act(() => result.current.start());
   expect(result.current.status).toBe('unsupported');
   expect(result.current.message).toBe('Expo Go cannot scan.');
+});
+
+describe('restarting and resuming', () => {
+  // Date.now() follows the fake timers, so time moves on tick by tick as timers advance.
+  const realClock = { now: () => Date.now() };
+
+  test('a restart keeps earlier devices until they have had staleMs to be heard again', async () => {
+    const fake = createFakeScanner();
+    const { result } = await renderScan(fake, realClock);
+    await act(() => result.current.start());
+    const firstSeen = Date.now();
+    await emit(fake, ad('kept'), ad('gone'));
+    await act(async () => jest.advanceTimersByTime(500));
+    await act(async () => result.current.stop());
+
+    // Stopped for longer than staleMs, e.g. while the user looked in Settings.
+    jest.setSystemTime(Date.now() + 40_000);
+    await act(() => result.current.start());
+    await act(async () => jest.advanceTimersByTime(500));
+    expect(result.current.devices.map((device) => device.id)).toEqual(['kept', 'gone']);
+
+    await emit(fake, ad('kept'));
+    await act(async () => jest.advanceTimersByTime(30_000));
+    // Only the device that was heard again is left, and it is still the same device.
+    expect(result.current.devices.map((device) => [device.id, device.firstSeen])).toEqual([['kept', firstSeen]]);
+  });
+
+  test('paused timers (app in the background, screen off) get the same grace', async () => {
+    const fake = createFakeScanner();
+    const { result } = await renderScan(fake, realClock);
+    await act(() => result.current.start());
+    await emit(fake, ad('a'));
+    await act(async () => jest.advanceTimersByTime(500));
+
+    // No ticks for a minute, then the overdue tick fires as soon as timers run again.
+    jest.setSystemTime(Date.now() + 60_000);
+    await act(async () => jest.advanceTimersByTime(500));
+    expect(result.current.devices.map((device) => device.id)).toEqual(['a']);
+
+    await act(async () => jest.advanceTimersByTime(30_500));
+    expect(result.current.devices).toEqual([]);
+  });
+
+  test('without a restart, a device still goes once it has not been heard for staleMs', async () => {
+    const fake = createFakeScanner();
+    const { result } = await renderScan(fake, { ...realClock, staleMs: 2_000 });
+    await act(() => result.current.start());
+    await act(async () => jest.advanceTimersByTime(5_000));
+    await emit(fake, ad('a'));
+    await act(async () => jest.advanceTimersByTime(2_000));
+    expect(result.current.devices).toHaveLength(1);
+    await act(async () => jest.advanceTimersByTime(1_000));
+    expect(result.current.devices).toEqual([]);
+  });
+});
+
+describe('when the app goes to the background', () => {
+  const appStateMock = jest.mocked(AppState.addEventListener);
+
+  function sendAppState(state: AppStateStatus) {
+    const calls = appStateMock.mock.calls.filter(([type]) => type === 'change');
+    const listener = calls[calls.length - 1][1];
+    return act(async () => listener(state));
+  }
+
+  beforeEach(() => {
+    appStateMock.mockClear();
+  });
+
+  test('pauses a running scan and restarts it on return', async () => {
+    const fake = createFakeScanner();
+    const { result } = await renderScan(fake);
+    await act(() => result.current.start());
+
+    await sendAppState('background');
+    expect(fake.started).toBe(false);
+    expect(result.current.status).toBe('idle');
+
+    await sendAppState('active');
+    expect(fake.started).toBe(true);
+    expect(fake.calls.start).toBe(2);
+    expect(result.current.status).toBe('scanning');
+  });
+
+  test('also pauses a scanner waiting for Bluetooth, so turning it on in Settings does not scan in the background', async () => {
+    const fake = createFakeScanner();
+    const { result } = await renderScan(fake);
+    await act(() => result.current.start());
+    await act(async () => fake.emitStatus('bluetooth-off', 'Turn on Bluetooth to scan.'));
+
+    await sendAppState('background');
+    expect(fake.started).toBe(false);
+    expect(result.current.status).toBe('idle');
+
+    await sendAppState('active');
+    expect(fake.calls.start).toBe(2);
+    expect(result.current.status).toBe('scanning');
+  });
+
+  test('keeps scanning when the app is only inactive (iOS Control Center, app switcher)', async () => {
+    const fake = createFakeScanner();
+    const { result } = await renderScan(fake);
+    await act(() => result.current.start());
+    await sendAppState('inactive');
+    await sendAppState('active');
+    expect(fake.calls.stop).toBe(0);
+    expect(result.current.status).toBe('scanning');
+  });
+
+  test('does not restart a scan the user stopped', async () => {
+    const fake = createFakeScanner();
+    const { result } = await renderScan(fake);
+    await act(() => result.current.start());
+    await act(async () => result.current.stop());
+    await sendAppState('background');
+    await sendAppState('active');
+    expect(fake.calls.start).toBe(1);
+    expect(result.current.status).toBe('idle');
+
+    await act(() => result.current.start());
+    await sendAppState('background');
+    // A stop while in the background (e.g. from code) also cancels the restart.
+    await act(async () => result.current.stop());
+    await sendAppState('active');
+    expect(result.current.status).toBe('idle');
+  });
+
+  test("leaves a pending permission request alone (Android's dialog sends the app to the background)", async () => {
+    const fake = createFakeScanner();
+    let answer: (result: 'granted') => void = () => undefined;
+    fake.requestPermissions = () => new Promise((resolve) => (answer = resolve));
+    const { result } = await renderScan(fake);
+
+    let pending: Promise<void> = Promise.resolve();
+    await act(async () => {
+      pending = result.current.start();
+    });
+    await sendAppState('background');
+    expect(result.current.status).toBe('requesting-permission');
+    await act(async () => {
+      answer('granted');
+      await pending;
+    });
+    await sendAppState('active');
+    expect(fake.calls.start).toBe(1);
+    expect(result.current.status).toBe('scanning');
+  });
+
+  test('stops listening on unmount', async () => {
+    const { unmount } = await renderScan(createFakeScanner());
+    const index = appStateMock.mock.calls.findIndex(([type]) => type === 'change');
+    const subscription = appStateMock.mock.results[index].value as { remove: jest.Mock };
+    await unmount();
+    expect(subscription.remove).toHaveBeenCalledTimes(1);
+  });
 });

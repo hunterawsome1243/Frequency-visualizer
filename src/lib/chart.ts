@@ -11,8 +11,8 @@ export interface ChartRange {
 /** Same span as the radar: -100 dBm (very weak) to -30 dBm (right next to the phone). */
 export const CHART_RSSI_RANGE: ChartRange = { min: -100, max: -30 };
 
-/** How many of the newest samples the chart draws. */
-export const CHART_MAX_SAMPLES = 60;
+/** How many of the newest samples the chart draws: about two minutes at one sample per second. */
+export const CHART_MAX_SAMPLES = 120;
 
 /** Space kept free around the plotted line, e.g. for axis labels or so the end dot is not clipped. */
 export interface ChartInsets {

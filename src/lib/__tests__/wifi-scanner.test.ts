@@ -58,8 +58,12 @@ function setAndroid() {
 }
 
 function mockPermission(alreadyGranted: boolean, answer: 'granted' | 'denied' | 'never_ask_again' = 'granted') {
+  const { ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION } = PermissionsAndroid.PERMISSIONS;
   const check = jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(alreadyGranted);
-  const request = jest.spyOn(PermissionsAndroid, 'request').mockResolvedValue(answer);
+  const request = jest.spyOn(PermissionsAndroid, 'requestMultiple').mockResolvedValue({
+    [ACCESS_FINE_LOCATION]: answer,
+    [ACCESS_COARSE_LOCATION]: answer,
+  } as Awaited<ReturnType<typeof PermissionsAndroid.requestMultiple>>);
   return { check, request };
 }
 
@@ -124,12 +128,30 @@ describe('on Android', () => {
     expect(wifiMock.loadWifiList).not.toHaveBeenCalled();
   });
 
-  test('asks for fine location when needed', async () => {
-    const { request } = mockPermission(false, 'granted');
+  test('asks for fine location, together with coarse, when needed', async () => {
+    const { check, request } = mockPermission(false, 'granted');
     wifiMock.reScanAndLoadWifiList.mockResolvedValue([]);
 
     await expect(scanWifi()).resolves.toEqual({ status: 'ok', networks: [] });
-    expect(request).toHaveBeenCalledWith(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION, expect.any(Object));
+    expect(check).toHaveBeenCalledWith(PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION);
+    expect(request).toHaveBeenCalledWith([
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+    ]);
+  });
+
+  test('approximate location only counts as denied, since the Wi-Fi library needs fine location', async () => {
+    const { ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION } = PermissionsAndroid.PERMISSIONS;
+    jest.spyOn(PermissionsAndroid, 'check').mockResolvedValue(false);
+    jest.spyOn(PermissionsAndroid, 'requestMultiple').mockResolvedValue({
+      [ACCESS_FINE_LOCATION]: 'denied',
+      [ACCESS_COARSE_LOCATION]: 'granted',
+    } as Awaited<ReturnType<typeof PermissionsAndroid.requestMultiple>>);
+    await expect(scanWifi()).resolves.toEqual({
+      status: 'permission-denied',
+      message: WIFI_PERMISSION_DENIED_MESSAGE,
+    });
+    expect(wifiMock.reScanAndLoadWifiList).not.toHaveBeenCalled();
   });
 
   test('a denied permission explains why it is needed and does not scan', async () => {

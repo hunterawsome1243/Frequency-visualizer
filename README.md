@@ -19,7 +19,7 @@ We'd rather be honest than impressive:
 
 - **It doesn't measure the electromagnetic spectrum.** A phone can only hear what its own Bluetooth and Wi-Fi radios pick up. Radio stations, microwave ovens, mobile networks, power lines and every other kind of EM wave are invisible to it.
 - **Signal strength is a hint, not a distance.** Walls, bodies, pockets and phone cases all change it a lot, so "near" and "far" are rough guesses.
-- **Tracker detection is best effort.** It guesses from the data devices broadcast over Bluetooth. It can miss trackers (for example ones that are switched off or change how they advertise) and it can flag harmless devices. "Possible tracker" never means "definitely a tracker". On iPhone, iOS hides the Bluetooth data that marks AirTags and other Find My devices from apps, so the app usually can't spot those there; Tile, SmartTag, Chipolo and Google Find Hub tags can still show up. If you think someone is tracking you, also use your phone's built-in unknown tracker alerts, and contact the police if you feel unsafe.
+- **Tracker detection is best effort.** It guesses from the data devices broadcast over Bluetooth. It can miss trackers (for example ones that are switched off or change how they advertise) and it can flag harmless devices. "Possible tracker" never means "definitely a tracker". On iPhone, iOS hides the Bluetooth data that marks AirTags and other Find My devices from apps, so there they usually appear only as unnamed devices with no tracker label; Tile, SmartTag, Chipolo and Google Find Hub tags can still be flagged. If you think someone is tracking you, also use your phone's built-in unknown tracker alerts, and contact the police if you feel unsafe.
 - **Wi-Fi scanning is Android only.** iOS doesn't let apps scan for Wi-Fi networks. Android also limits how often an app may scan (about 4 times every 2 minutes) and needs Location turned on.
 - **Bluetooth scanning needs a development build** on a real phone. It doesn't work in Expo Go, a simulator or a web browser (see below).
 
@@ -29,7 +29,7 @@ Everything stays on your phone. There's no account, no server and no analytics: 
 
 ## Requirements
 
-- [Node.js](https://nodejs.org) 22.13 or newer (or 24.3+)
+- [Node.js](https://nodejs.org) 22 LTS (22.13+), 24 LTS (24.3+) or 26+
 - A real Android phone or iPhone (simulators and emulators have no Bluetooth to scan)
 - A free [Expo account](https://expo.dev/signup), used to build the app with EAS
 - For iPhone builds: a paid [Apple Developer](https://developer.apple.com/programs/) membership

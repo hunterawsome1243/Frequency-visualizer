@@ -22,6 +22,8 @@ const CHANNEL_RANGES: readonly { band: WifiNetwork['band']; min: number; max: nu
 
 /** Channel 14 (Japan only) sits off the regular 2.4 GHz grid. */
 const CHANNEL_14_FREQUENCY = 2484;
+/** 6 GHz channel 2 (operating class 136) sits below the regular 6 GHz grid, as in Android's ScanResult. */
+const CHANNEL_2_6GHZ_FREQUENCY = 5935;
 
 function findRange(frequency: number) {
   return CHANNEL_RANGES.find((range) => frequency >= range.min && frequency <= range.max);
@@ -31,6 +33,7 @@ function findRange(frequency: number) {
 export function frequencyToChannel(frequency: number): number | null {
   if (!Number.isFinite(frequency)) return null;
   if (frequency === CHANNEL_14_FREQUENCY) return 14;
+  if (frequency === CHANNEL_2_6GHZ_FREQUENCY) return 2;
   const range = findRange(frequency);
   if (!range) return null;
   const channel = (frequency - range.base) / 5;
@@ -40,14 +43,16 @@ export function frequencyToChannel(frequency: number): number | null {
 export function frequencyToBand(frequency: number): WifiNetwork['band'] {
   if (!Number.isFinite(frequency)) return 'unknown';
   if (frequency === CHANNEL_14_FREQUENCY) return '2.4 GHz';
+  if (frequency === CHANNEL_2_6GHZ_FREQUENCY) return '6 GHz';
   return findRange(frequency)?.band ?? 'unknown';
 }
 
 function isHiddenSsid(ssid: unknown): boolean {
   if (typeof ssid !== 'string') return true;
-  // Some access points hide their name by broadcasting NUL bytes instead of an empty name.
-  const visible = ssid.replace(/\u0000/g, '').trim();
-  return visible === '' || visible.toLowerCase() === '<unknown ssid>';
+  // Some access points hide their name by broadcasting NUL bytes instead of an empty name, and
+  // react-native-wifi-reborn already turns an empty name into "(hidden SSID)".
+  const visible = ssid.replace(/\u0000/g, '').trim().toLowerCase();
+  return visible === '' || visible === '<unknown ssid>' || visible === '(hidden ssid)';
 }
 
 function isFiniteNumber(value: unknown): value is number {

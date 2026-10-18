@@ -1,6 +1,7 @@
 import { act, render, renderHook, screen } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
 import { Text } from 'react-native';
+
+import type { BleScanState } from '@/hooks/use-ble-scan';
 
 import { ScanProvider, useScan } from '@/context/scan-context';
 import type { DeviceMap } from '@/lib/device-list';
@@ -56,18 +57,19 @@ afterEach(() => {
 });
 
 test('every screen under the provider sees the same scan', async () => {
-  const fake = createFakeScanner();
-  const { result } = await renderHook(() => useScan(), {
-    wrapper: ({ children }: { children: ReactNode }) => <ScanProvider scanner={fake}>{children}</ScanProvider>,
-  });
+  const seen: Record<string, BleScanState> = {};
+  function Consumer(props: { name: string }) {
+    seen[props.name] = useScan();
+    return null;
+  }
   await render(
-    <ScanProvider scanner={fake}>
-      <ScanSummary label="Radar" />
-      <ScanSummary label="List" />
+    <ScanProvider scanner={createFakeScanner()}>
+      <Consumer name="radar" />
+      <Consumer name="list" />
     </ScanProvider>,
   );
-  expect(screen.getByText('Radar: idle, 0 devices')).toBeTruthy();
-  expect(result.current.status).toBe('idle');
+  expect(seen.radar.status).toBe('idle');
+  expect(seen.radar).toBe(seen.list);
 });
 
 test('starting from one consumer updates the others', async () => {

@@ -12,7 +12,7 @@ export type PermissionResult = 'granted' | 'denied' | 'blocked';
 
 /** Thin wrapper around the BLE library so the hook and tests can use a fake. */
 export interface Scanner {
-  /** Asks for the runtime permissions the platform needs (Android 12+: BLUETOOTH_SCAN/CONNECT; older Android: fine location; iOS: handled by the system on first scan). */
+  /** Asks for the runtime permissions the platform needs (Android 12+: BLUETOOTH_SCAN/CONNECT plus fine and coarse location; older Android: fine and coarse location; iOS: handled by the system on first scan). */
   requestPermissions(): Promise<PermissionResult>;
   /** Starts scanning, reporting every advertisement (duplicates allowed so RSSI stays live) and status changes. */
   start(listener: ScannerListener): void;
@@ -78,17 +78,18 @@ export function combinePermissionResults(results: readonly (string | undefined)[
 /**
  * Android 12+ (API 31) needs BLUETOOTH_SCAN and BLUETOOTH_CONNECT, plus fine location because the
  * manifest does not claim neverForLocation (some beacons and trackers are only reported with it).
- * Older Android needs fine location for any BLE scan. iOS asks on the first scan by itself and
- * reports a refusal through the Bluetooth state, so this resolves "granted" there.
+ * Older Android needs fine location for any BLE scan. Fine location is always asked for together
+ * with coarse location: Android 12+ may ignore a request for fine location on its own. All of them
+ * must be granted, so choosing "Approximate" location counts as a denial. iOS asks on the first scan
+ * by itself and reports a refusal through the Bluetooth state, so this resolves "granted" there.
  */
 export async function requestBlePermissions(): Promise<PermissionResult> {
   if (Platform.OS !== 'android') return 'granted';
 
   const { PERMISSIONS } = PermissionsAndroid;
+  const location: Permission[] = [PERMISSIONS.ACCESS_FINE_LOCATION, PERMISSIONS.ACCESS_COARSE_LOCATION];
   const permissions: Permission[] =
-    Platform.Version >= 31
-      ? [PERMISSIONS.BLUETOOTH_SCAN, PERMISSIONS.BLUETOOTH_CONNECT, PERMISSIONS.ACCESS_FINE_LOCATION]
-      : [PERMISSIONS.ACCESS_FINE_LOCATION];
+    Platform.Version >= 31 ? [PERMISSIONS.BLUETOOTH_SCAN, PERMISSIONS.BLUETOOTH_CONNECT, ...location] : location;
 
   try {
     const results: Partial<Record<Permission, string>> = await PermissionsAndroid.requestMultiple(permissions);
@@ -96,6 +97,24 @@ export async function requestBlePermissions(): Promise<PermissionResult> {
   } catch {
     return 'denied';
   }
+}
+
+/**
+ * What Android calls the permissions requestBlePermissions needs, for messages such as "Allow Nearby
+ * devices and precise Location". null on other platforms, where the system asks by itself.
+ */
+export function blePermissionNames(): string | null {
+  if (Platform.OS !== 'android') return null;
+  return Platform.Version >= 31 ? 'Nearby devices and precise Location' : 'Location';
+}
+
+/**
+ * Android shows its permission prompts with no explanation from the app, so screens say before the
+ * first scan what it will ask for. null on other platforms.
+ */
+export function blePermissionNote(): string | null {
+  const names = blePermissionNames();
+  return names === null ? null : `Android will ask you to allow ${names}. The app doesn't save your location.`;
 }
 
 function createUnsupportedScanner(message: string): Scanner {

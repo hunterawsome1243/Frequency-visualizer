@@ -1,7 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 
 import { DEFAULT_STALE_MS, type DeviceMap, pruneStale, upsertAdvertisement } from '@/lib/device-list';
-import { createBleScanner, type PermissionResult, type Scanner, type ScannerListener } from '@/lib/scanner';
+import {
+  blePermissionNames,
+  createBleScanner,
+  type PermissionResult,
+  type Scanner,
+  type ScannerListener,
+} from '@/lib/scanner';
 import type { ScannedDevice, ScanStatus } from '@/lib/types';
 
 export interface BleScanState {
@@ -32,6 +39,20 @@ export const PERMISSION_DENIED_MESSAGE = 'Bluetooth permission is needed to see 
 export const PERMISSION_BLOCKED_MESSAGE =
   'Bluetooth permission is turned off for this app. Allow it in Settings, then try again.';
 export const START_FAILED_MESSAGE = "Couldn't start scanning. Try again.";
+/** A gap between publish ticks longer than this means timers were paused (app in the background, screen off). */
+const PAUSED_TICK_GAP_MS = 5_000;
+
+/**
+ * Message for a refused permission. On Android it names every permission the scan needs, because a
+ * refused Location blocks the scan as much as a refused Nearby devices does.
+ */
+export function permissionMessage(result: Exclude<PermissionResult, 'granted'>): string {
+  const names = blePermissionNames();
+  if (names === null) return result === 'blocked' ? PERMISSION_BLOCKED_MESSAGE : PERMISSION_DENIED_MESSAGE;
+  return result === 'blocked'
+    ? `To scan, allow ${names} for this app in Settings, then try again. The app doesn't save your location.`
+    : `Allow ${names} so Android lets the app scan for Bluetooth devices. The app doesn't save your location.`;
+}
 
 interface StatusState {
   status: ScanStatus;
@@ -65,6 +86,14 @@ function createScanController(
   let own: Scanner | null = null;
   let timer: ReturnType<typeof setInterval> | null = null;
   let pendingStart: Promise<void> | null = null;
+  /**
+   * No pruning before this time. Set staleMs after every (re)start and after paused timers, so devices
+   * kept from before get a chance to be heard again instead of being dropped on the first tick.
+   */
+  let pruneFrom = 0;
+  let lastTickAt = 0;
+  /** Set when the app went to the background mid-scan, so the scan restarts when it comes back. */
+  let resumeOnActive = false;
 
   function setStatus(next: ScanStatus, message: string | null = null) {
     status = next;
@@ -78,10 +107,17 @@ function createScanController(
   }
 
   function tick() {
-    const pruned = pruneStale(devices, config.now(), config.staleMs);
-    if (pruned !== devices) {
-      devices = pruned;
-      dirty = true;
+    const t = config.now();
+    if (t - lastTickAt > Math.max(PAUSED_TICK_GAP_MS, 2 * config.updateIntervalMs)) {
+      pruneFrom = Math.max(pruneFrom, t + config.staleMs);
+    }
+    lastTickAt = t;
+    if (t >= pruneFrom) {
+      const pruned = pruneStale(devices, t, config.staleMs);
+      if (pruned !== devices) {
+        devices = pruned;
+        dirty = true;
+      }
     }
     publish();
   }
@@ -94,6 +130,7 @@ function createScanController(
 
   function startTimer() {
     stopTimer();
+    lastTickAt = config.now();
     timer = setInterval(tick, config.updateIntervalMs);
   }
 
@@ -119,10 +156,7 @@ function createScanController(
     }
     if (runGeneration !== generation || !mounted) return;
     if (permission !== 'granted') {
-      setStatus(
-        'permission-denied',
-        permission === 'blocked' ? PERMISSION_BLOCKED_MESSAGE : PERMISSION_DENIED_MESSAGE,
-      );
+      setStatus('permission-denied', permissionMessage(permission));
       return;
     }
 
@@ -138,6 +172,7 @@ function createScanController(
       },
     };
     active = scanner;
+    pruneFrom = config.now() + config.staleMs;
     startTimer();
     try {
       scanner.start(listener);
@@ -145,6 +180,33 @@ function createScanController(
       stopActive();
       setStatus('error', START_FAILED_MESSAGE);
     }
+  }
+
+  function startScan(): Promise<void> {
+    if (!mounted) return Promise.resolve();
+    if (pendingStart) return pendingStart;
+    const scanner = resolveScanner();
+    if (status === 'scanning' && active === scanner) return Promise.resolve();
+
+    // Anything else (a different scanner, Bluetooth off, an error) starts over from the permission step.
+    stopActive();
+    generation += 1;
+    setStatus('requesting-permission');
+    const promise = run(generation, scanner).finally(() => {
+      if (pendingStart === promise) pendingStart = null;
+    });
+    pendingStart = promise;
+    return promise;
+  }
+
+  function stopScan() {
+    if (status === 'idle' && active === null && pendingStart === null) return;
+    generation += 1;
+    pendingStart = null;
+    stopActive();
+    // Keep the devices, including any that arrived since the last publish.
+    publish();
+    setStatus('idle');
   }
 
   return {
@@ -155,30 +217,33 @@ function createScanController(
     },
 
     start(): Promise<void> {
-      if (!mounted) return Promise.resolve();
-      if (pendingStart) return pendingStart;
-      const scanner = resolveScanner();
-      if (status === 'scanning' && active === scanner) return Promise.resolve();
-
-      // Anything else (a different scanner, Bluetooth off, an error) starts over from the permission step.
-      stopActive();
-      generation += 1;
-      setStatus('requesting-permission');
-      const promise = run(generation, scanner).finally(() => {
-        if (pendingStart === promise) pendingStart = null;
-      });
-      pendingStart = promise;
-      return promise;
+      resumeOnActive = false;
+      return startScan();
     },
 
     stop() {
-      if (status === 'idle' && active === null && pendingStart === null) return;
-      generation += 1;
-      pendingStart = null;
-      stopActive();
-      // Keep the devices, including any that arrived since the last publish.
-      publish();
-      setStatus('idle');
+      resumeOnActive = false;
+      stopScan();
+    },
+
+    /**
+     * Pauses a running scan while the app is in the background and restarts it on return. Android keeps
+     * scanning in the background otherwise, while the publish timer (and so pruning) is paused.
+     * Any attached scanner is paused, not only a scanning one: with Bluetooth off it still listens for
+     * the state change and would start scanning in the background when the user turns Bluetooth on in
+     * Settings. "inactive" (iOS Control Center, app switcher, system alerts) is ignored, and so is a
+     * background switch while asking for permission (no scanner is attached yet): Android's permission
+     * dialog sends the app to the background.
+     */
+    appStateChanged(state: AppStateStatus) {
+      if (state === 'background') {
+        if (active === null) return;
+        stopScan();
+        resumeOnActive = true;
+      } else if (state === 'active' && resumeOnActive) {
+        resumeOnActive = false;
+        startScan().catch(() => undefined);
+      }
     },
 
     clear() {
@@ -194,7 +259,10 @@ function createScanController(
     unmount() {
       generation += 1;
       pendingStart = null;
+      resumeOnActive = false;
       stopActive();
+      // Ignored on a real unmount; after Fast Refresh re-runs the effects it stops the UI saying "scanning".
+      if (status !== 'idle') setStatus('idle');
       mounted = false;
       // Only a scanner this hook created is destroyed; an injected one belongs to the caller.
       own?.destroy();
@@ -205,8 +273,8 @@ function createScanController(
 
 /**
  * Owns a Scanner: batches advertisements with upsertAdvertisement, prunes stale devices,
- * publishes the list at most every updateIntervalMs, stops on unmount and destroys a scanner
- * it created itself. Pass a scanner (e.g. createFakeScanner()) in tests; otherwise it creates
+ * publishes the list at most every updateIntervalMs, pauses while the app is in the background,
+ * stops on unmount and destroys a scanner it created itself. Pass a scanner (e.g. createFakeScanner()) in tests; otherwise it creates
  * createBleScanner() lazily on first start().
  */
 export function useBleScan(scanner?: Scanner, options?: BleScanOptions): BleScanState {
@@ -228,6 +296,11 @@ export function useBleScan(scanner?: Scanner, options?: BleScanOptions): BleScan
   useEffect(() => {
     controller.mount();
     return () => controller.unmount();
+  }, [controller]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', controller.appStateChanged);
+    return () => subscription.remove();
   }, [controller]);
 
   const { status, message } = statusState;

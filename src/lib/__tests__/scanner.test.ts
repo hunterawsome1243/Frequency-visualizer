@@ -2,6 +2,7 @@ import { PermissionsAndroid, Platform } from 'react-native';
 
 import {
   BLE_NOT_AVAILABLE_MESSAGE,
+  blePermissionNames,
   BLUETOOTH_OFF_MESSAGE,
   BLUETOOTH_UNAUTHORIZED_MESSAGE,
   combinePermissionResults,
@@ -114,6 +115,8 @@ const AD: Advertisement = {
 
 beforeEach(() => {
   mockManagers.length = 0;
+  // restoreAllMocks only resets spies, so clear the calls an earlier test made to this plain jest.fn().
+  bleMock.BleManager.mockClear();
   expoMock.isRunningInExpoGo.mockReturnValue(false);
 });
 
@@ -383,7 +386,8 @@ describe('deviceToAdvertisement', () => {
 });
 
 describe('requestBlePermissions', () => {
-  const { BLUETOOTH_SCAN, BLUETOOTH_CONNECT, ACCESS_FINE_LOCATION } = PermissionsAndroid.PERMISSIONS;
+  const { BLUETOOTH_SCAN, BLUETOOTH_CONNECT, ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION } =
+    PermissionsAndroid.PERMISSIONS;
 
   function mockRequestMultiple(results: Record<string, string>) {
     return jest
@@ -398,22 +402,39 @@ describe('requestBlePermissions', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  test('on Android 12+ asks for scan, connect and fine location', async () => {
+  test('on Android 12+ asks for scan, connect, and fine location together with coarse', async () => {
     setPlatform('android', 31);
     const spy = mockRequestMultiple({
       [BLUETOOTH_SCAN]: 'granted',
       [BLUETOOTH_CONNECT]: 'granted',
       [ACCESS_FINE_LOCATION]: 'granted',
+      [ACCESS_COARSE_LOCATION]: 'granted',
     });
     await expect(requestBlePermissions()).resolves.toBe('granted');
-    expect(spy).toHaveBeenCalledWith([BLUETOOTH_SCAN, BLUETOOTH_CONNECT, ACCESS_FINE_LOCATION]);
+    expect(spy).toHaveBeenCalledWith([
+      BLUETOOTH_SCAN,
+      BLUETOOTH_CONNECT,
+      ACCESS_FINE_LOCATION,
+      ACCESS_COARSE_LOCATION,
+    ]);
   });
 
-  test('on Android before 12 asks for fine location only', async () => {
+  test('on Android before 12 asks for location only', async () => {
     setPlatform('android', 30);
-    const spy = mockRequestMultiple({ [ACCESS_FINE_LOCATION]: 'granted' });
+    const spy = mockRequestMultiple({ [ACCESS_FINE_LOCATION]: 'granted', [ACCESS_COARSE_LOCATION]: 'granted' });
     await expect(requestBlePermissions()).resolves.toBe('granted');
-    expect(spy).toHaveBeenCalledWith([ACCESS_FINE_LOCATION]);
+    expect(spy).toHaveBeenCalledWith([ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION]);
+  });
+
+  test('approximate location (coarse without fine) gives denied', async () => {
+    setPlatform('android', 33);
+    mockRequestMultiple({
+      [BLUETOOTH_SCAN]: 'granted',
+      [BLUETOOTH_CONNECT]: 'granted',
+      [ACCESS_FINE_LOCATION]: 'denied',
+      [ACCESS_COARSE_LOCATION]: 'granted',
+    });
+    await expect(requestBlePermissions()).resolves.toBe('denied');
   });
 
   test('any denial gives denied', async () => {
@@ -422,6 +443,7 @@ describe('requestBlePermissions', () => {
       [BLUETOOTH_SCAN]: 'granted',
       [BLUETOOTH_CONNECT]: 'granted',
       [ACCESS_FINE_LOCATION]: 'denied',
+      [ACCESS_COARSE_LOCATION]: 'denied',
     });
     await expect(requestBlePermissions()).resolves.toBe('denied');
   });
@@ -432,6 +454,7 @@ describe('requestBlePermissions', () => {
       [BLUETOOTH_SCAN]: 'denied',
       [BLUETOOTH_CONNECT]: 'never_ask_again',
       [ACCESS_FINE_LOCATION]: 'granted',
+      [ACCESS_COARSE_LOCATION]: 'granted',
     });
     await expect(requestBlePermissions()).resolves.toBe('blocked');
   });
@@ -451,8 +474,20 @@ describe('requestBlePermissions', () => {
       [BLUETOOTH_SCAN]: 'granted',
       [BLUETOOTH_CONNECT]: 'never_ask_again',
       [ACCESS_FINE_LOCATION]: 'granted',
+      [ACCESS_COARSE_LOCATION]: 'granted',
     });
     await expect(createBleScanner().requestPermissions()).resolves.toBe('blocked');
+  });
+});
+
+describe('blePermissionNames', () => {
+  test('names the Android permissions the scan needs, and nothing elsewhere', () => {
+    setPlatform('android', 31);
+    expect(blePermissionNames()).toBe('Nearby devices and precise Location');
+    setPlatform('android', 30);
+    expect(blePermissionNames()).toBe('Location');
+    setPlatform('ios');
+    expect(blePermissionNames()).toBeNull();
   });
 });
 

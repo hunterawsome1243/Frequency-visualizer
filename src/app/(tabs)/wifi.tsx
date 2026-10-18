@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import {
   FlatList,
-  Linking,
   Platform,
   RefreshControl,
   StyleSheet,
@@ -11,7 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { openAppSettings } from '@/components/scan-status-card';
+import { openAppSettings, openLocationSettings } from '@/components/scan-status-card';
 import { ActionButton, StateView } from '@/components/state-view';
 import { WifiRow } from '@/components/wifi-row';
 import { BottomTabInset, MaxContentWidth, Neon, Spacing } from '@/constants/theme';
@@ -37,12 +36,6 @@ const IDLE_MESSAGE =
 
 type Problem = Exclude<WifiScanResult, { status: 'ok' }>;
 
-/** Opens Android's Location settings page; falls back to this app's page if that fails. */
-function openLocationSettings(): void {
-  if (Platform.OS !== 'android') return;
-  Linking.sendIntent('android.settings.LOCATION_SOURCE_SETTINGS').catch(openAppSettings);
-}
-
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -55,10 +48,11 @@ export default function WifiScreen() {
   // the screen; the web tab bar floats over the top of the page.
   const padding: ViewStyle = Platform.select<ViewStyle>({
     ios: { paddingTop: insets.top + Spacing.three, paddingBottom: insets.bottom + BottomTabInset + Spacing.three },
+    // paddingLeft/Right win over the list's paddingHorizontal, so they include it.
     android: {
       paddingTop: insets.top + Spacing.three,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
+      paddingLeft: insets.left + Spacing.three,
+      paddingRight: insets.right + Spacing.three,
       paddingBottom: Spacing.five,
     },
     default: { paddingTop: Spacing.six + Spacing.four, paddingBottom: Spacing.five },

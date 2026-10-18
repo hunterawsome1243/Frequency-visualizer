@@ -72,9 +72,10 @@ export default function AboutScreen() {
 
         <Section title="What it can't detect" accent={Neon.magenta}>
           <Bullet color={Neon.magenta}>
-            <Strong>The electromagnetic spectrum.</Strong> Phones have no sensor for radio, microwave,
-            cellular or other electromagnetic waves. The app only shows what the phone&apos;s
-            Bluetooth and Wi-Fi radios report.
+            <Strong>The electromagnetic spectrum.</Strong> Phones can&apos;t measure the
+            electromagnetic spectrum. The app can&apos;t see radio stations, mobile networks,
+            microwave ovens or power lines. It only shows the Bluetooth and Wi-Fi signals that the
+            phone&apos;s own radios decode.
           </Bullet>
           <Bullet color={Neon.magenta}>
             <Strong>Devices that aren&apos;t advertising.</Strong> A device that is off, asleep or not
@@ -92,10 +93,10 @@ export default function AboutScreen() {
             label like &quot;Possible AirTag&quot; is a hint, not proof.
           </Bullet>
           <Bullet color={Neon.magenta}>
-            <Strong>Most AirTags on iPhone.</Strong> iOS hides the Bluetooth data that marks AirTags
-            and other Find My devices from apps, so on an iPhone the app usually can&apos;t spot them.
-            Tile, SmartTag, Chipolo and Google Find Hub tags can still show up. For AirTags, the
-            iPhone&apos;s own Find My alerts are the better check.
+            <Strong>AirTags on iPhone.</Strong> iOS hides the Bluetooth data that marks AirTags and
+            other Find My devices from apps, so on an iPhone they usually appear only as unnamed
+            devices with no tracker label. Tile, SmartTag, Chipolo and Google Find Hub tags can still
+            be flagged. For AirTags, the iPhone&apos;s own Find My alerts are the better check.
           </Bullet>
           <Bullet color={Neon.magenta}>
             <Strong>Wi-Fi on iPhone.</Strong> iOS doesn&apos;t let apps scan for Wi-Fi networks, so
@@ -107,6 +108,9 @@ export default function AboutScreen() {
           <Bullet color={Neon.cyan}>
             <Strong>Scans stay on your phone.</Strong> Nothing is uploaded, and there is no account
             or server.
+          </Bullet>
+          <Bullet color={Neon.cyan}>
+            Scanning pauses when you leave the app and starts again when you come back.
           </Bullet>
           <Bullet color={Neon.cyan}>Nicknames you give devices are saved only on this phone.</Bullet>
           <Bullet color={Neon.cyan}>
@@ -168,7 +172,7 @@ function PermissionSection() {
           {denied && (
             <Text style={styles.body}>
               To fix this, open Settings and allow Bluetooth (on Android it&apos;s called
-              &quot;Nearby devices&quot;; allow Location too if it&apos;s listed). Then come back and
+              &quot;Nearby devices&quot;; allow precise Location too if it&apos;s listed). Then come back and
               tap &quot;Allow Bluetooth and scan&quot;.
             </Text>
           )}

@@ -72,7 +72,10 @@ export function NicknameEditor(props: { deviceId: string }): ReactNode {
           onPress={() => void save('')}
         />
       </View>
-      <Text style={styles.hint}>Nicknames are saved on this phone only.</Text>
+      <Text style={styles.hint}>
+        Nicknames are saved on this phone only. Some devices change their Bluetooth address often, so a
+        nickname may not stay with them.
+      </Text>
     </View>
   );
 }

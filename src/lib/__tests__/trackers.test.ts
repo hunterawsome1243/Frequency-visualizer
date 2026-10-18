@@ -130,12 +130,13 @@ describe('detectTracker', () => {
       });
     });
 
-    it('flags a Find My accessory from another brand', () => {
+    it('flags a Find My accessory (kind 2)', () => {
       expectMatch(detectTracker(ad({ manufacturerData: findMyAway('20') })), {
         type: 'find-my',
         confidence: 'likely',
         label: 'Likely Find My tracker',
-        reason: 'Apple Find My broadcast from a tracker made by another brand, away from its owner.',
+        reason:
+          "Apple Find My broadcast from a Find My accessory, such as a newer AirTag, AirPods or another brand's tracker, away from its owner.",
       });
       expectMatch(detectTracker(ad({ manufacturerData: findMyNear('60') })), {
         type: 'find-my',
@@ -294,10 +295,12 @@ describe('detectTracker', () => {
       });
     });
 
-    it('flags frame type 0x40 as possible', () => {
+    it('flags frame type 0x40 as possible, saying it may be an Android phone', () => {
       expectMatch(detectTracker(ad({ serviceData: { FEAA: b64(`40 ${EID} 04`) } })), {
         type: 'find-hub',
         confidence: 'possible',
+        reason:
+          'Google Find Hub broadcast. It may be a tracker that was near its owner recently, or an offline Android phone or other Find Hub device.',
       });
     });
 

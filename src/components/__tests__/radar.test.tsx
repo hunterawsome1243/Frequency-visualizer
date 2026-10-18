@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { AccessibilityInfo, Animated, StyleSheet } from 'react-native';
 
 import RadarScreen, { RADAR_CAPTION } from '@/app/(tabs)/index';
 import { DOT_HIT_SIZE, Radar, RADAR_RINGS, dotLabel, radarSummary } from '@/components/radar';
@@ -11,8 +11,9 @@ import { radarPosition, rssiToRadiusFraction } from '@/lib/radar';
 import type { ScannedDevice, TrackerMatch } from '@/lib/types';
 
 const mockPush = jest.fn();
+let mockFocused = true;
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }), useIsFocused: () => mockFocused }));
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
@@ -71,6 +72,7 @@ function slotOffset(id: string): { x: number; y: number } {
 
 beforeEach(() => {
   mockPush.mockReset();
+  mockFocused = true;
   jest.mocked(AccessibilityInfo.isReduceMotionEnabled).mockResolvedValue(false);
 });
 
@@ -177,6 +179,38 @@ describe('Radar', () => {
     await waitFor(() => expect(slotOffset('a').x + DOT_HIT_SIZE / 2).toBeCloseTo(expected.x));
     expect(slotOffset('a').y + DOT_HIT_SIZE / 2).toBeCloseTo(expected.y);
     expect(slotOffset('a')).not.toEqual(before);
+  });
+
+  test('glides a dot to its new spot with the native driver, and only when it moves', async () => {
+    const timing = jest.spyOn(Animated, 'timing');
+    try {
+      const onSelect = jest.fn();
+      // No sweep, so every timing call after mount is a dot moving.
+      await render(<Radar devices={[device('a', -90)]} onSelect={onSelect} size={300} sweeping={false} />);
+      const base = timing.mock.calls.length;
+
+      await screen.rerender(<Radar devices={[device('a', -40)]} onSelect={onSelect} size={300} sweeping={false} />);
+      expect(timing).toHaveBeenCalledTimes(base + 1);
+      const [, config] = timing.mock.calls[base];
+      const target = radarPosition('a', -40, 150, 150, 150 - 14);
+      const toValue = config.toValue as { x: number; y: number };
+      expect(toValue.x).toBeCloseTo(target.x - DOT_HIT_SIZE / 2);
+      expect(toValue.y).toBeCloseTo(target.y - DOT_HIT_SIZE / 2);
+      expect(config.useNativeDriver).toBe(true);
+      const move = timing.mock.results[base].value as Animated.CompositeAnimation;
+      const stop = jest.spyOn(move, 'stop');
+
+      // Same signal: the dot stays put, so no new animation starts.
+      await screen.rerender(
+        <Radar devices={[device('a', -40, { lastSeen: 1 })]} onSelect={onSelect} size={300} sweeping={false} />,
+      );
+      expect(timing).toHaveBeenCalledTimes(base + 1);
+
+      await screen.unmount();
+      expect(stop).toHaveBeenCalledTimes(1);
+    } finally {
+      timing.mockRestore();
+    }
   });
 
   test('marks trackers with a ring and a pulse, and announces them in the summary', async () => {
@@ -300,6 +334,27 @@ describe('Radar tab', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Speaker, near, -50 dBm' }));
 
     expect(mockPush).toHaveBeenCalledWith({ pathname: '/device/[id]', params: { id: 'AA:BB' } });
+  });
+
+  test('while hidden behind another screen it keeps its last picture and stops the sweep', async () => {
+    mockScan({ status: 'scanning', isScanning: true, devices: [device('a', -50)] });
+    await render(<RadarScreen />);
+    await layoutRadar();
+    expect(screen.getByTestId('radar-sweep')).toBeOnTheScreen();
+
+    mockFocused = false;
+    await screen.rerender(<RadarScreen />);
+    mockScan({ status: 'scanning', isScanning: true, devices: [device('a', -50), device('b', -60)] });
+    await screen.rerender(<RadarScreen />);
+    expect(screen.getByTestId('radar-counts')).toHaveTextContent('1 device');
+    expect(screen.queryByTestId('radar-dot-b')).toBeNull();
+    expect(screen.queryByTestId('radar-sweep')).toBeNull();
+
+    mockFocused = true;
+    await screen.rerender(<RadarScreen />);
+    expect(screen.getByTestId('radar-counts')).toHaveTextContent('2 devices');
+    expect(screen.getByTestId('radar-dot-b')).toBeOnTheScreen();
+    expect(screen.getByTestId('radar-sweep')).toBeOnTheScreen();
   });
 
   test('keeps the last devices on a still radar after the scan stops', async () => {

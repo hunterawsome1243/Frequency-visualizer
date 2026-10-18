@@ -42,16 +42,16 @@ export function isWifiScanSupported(): boolean {
 
 type LocationPermission = 'granted' | 'denied' | 'blocked';
 
+/**
+ * Fine location is what the Wi-Fi library checks, but it is asked for together with coarse location:
+ * Android 12+ may ignore a request for fine location on its own.
+ */
 async function requestLocationPermission(): Promise<LocationPermission> {
-  const permission = PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
+  const { ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION } = PermissionsAndroid.PERMISSIONS;
   try {
-    if (await PermissionsAndroid.check(permission)) return 'granted';
-    const result = await PermissionsAndroid.request(permission, {
-      title: 'Allow location for Wi-Fi scans',
-      message:
-        "Android only shows nearby Wi-Fi networks to apps with location permission. This app doesn't save your location, and nothing leaves your phone.",
-      buttonPositive: 'OK',
-    });
+    if (await PermissionsAndroid.check(ACCESS_FINE_LOCATION)) return 'granted';
+    const results = await PermissionsAndroid.requestMultiple([ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION]);
+    const result = results[ACCESS_FINE_LOCATION];
     if (result === PermissionsAndroid.RESULTS.GRANTED) return 'granted';
     return result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN ? 'blocked' : 'denied';
   } catch {

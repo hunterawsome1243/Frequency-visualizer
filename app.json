@@ -47,7 +47,8 @@
           "neverForLocation": false,
           "bluetoothAlwaysPermission": "Frequency Visualizer uses Bluetooth to find nearby devices and show their signal strength. Scans stay on your phone and nothing is uploaded."
         }
-      ]
+      ],
+      "./plugins/with-ble-scan-location"
     ],
     "experiments": {
       "typedRoutes": true,

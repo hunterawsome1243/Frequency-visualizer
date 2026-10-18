@@ -1,8 +1,10 @@
 import {
   DEFAULT_HISTORY_LIMIT,
+  DEFAULT_MIN_SAMPLE_INTERVAL_MS,
   DEFAULT_STALE_MS,
   type DeviceMap,
   pruneStale,
+  RSSI_SMOOTHING_MS,
   upsertAdvertisement,
 } from '@/lib/device-list';
 import { detectTracker } from '@/lib/trackers';
@@ -76,15 +78,16 @@ describe('upsertAdvertisement', () => {
   it('keeps firstSeen and updates lastSeen, rssi and the stored advertisement', () => {
     let devices = upsertAdvertisement({}, ad({ rssi: -70 }), 1000, { detect: noTracker });
     const latest = ad({ rssi: -50, txPowerLevel: 4 });
-    devices = upsertAdvertisement(devices, latest, 2500, { detect: noTracker });
+    // Later than RSSI_SMOOTHING_MS, so the old reading no longer counts towards rssi.
+    devices = upsertAdvertisement(devices, latest, 5000, { detect: noTracker });
     const device = devices[latest.id];
     expect(device.firstSeen).toBe(1000);
-    expect(device.lastSeen).toBe(2500);
+    expect(device.lastSeen).toBe(5000);
     expect(device.rssi).toBe(-50);
     expect(device.advertisement).toBe(latest);
     expect(device.rssiHistory).toEqual([
       { t: 1000, rssi: -70 },
-      { t: 2500, rssi: -50 },
+      { t: 5000, rssi: -50 },
     ]);
   });
 
@@ -146,18 +149,29 @@ describe('upsertAdvertisement', () => {
   });
 
   describe('RSSI history', () => {
-    it.each([null, NaN, 127, Infinity, -Infinity])('skips history for %p and sets rssi to null', (rssi) => {
+    it.each([null, NaN, 127, Infinity, -Infinity])('skips history for %p and keeps the previous rssi', (rssi) => {
       let devices = upsertAdvertisement({}, ad({ rssi: -70 }), 1, { detect: noTracker });
+      const history = devices['AA:BB:CC:DD:EE:FF'].rssiHistory;
       devices = upsertAdvertisement(devices, ad({ rssi }), 2, { detect: noTracker });
       const device = devices['AA:BB:CC:DD:EE:FF'];
-      expect(device.rssi).toBeNull();
+      expect(device.rssi).toBe(-70);
       expect(device.lastSeen).toBe(2);
+      expect(device.rssiHistory).toBe(history);
       expect(device.rssiHistory).toEqual([{ t: 1, rssi: -70 }]);
     });
 
-    it('starts with an empty history when the first advertisement has no RSSI', () => {
+    it('keeps the previous rssi for a packet without one, even after the smoothing window', () => {
+      let devices = upsertAdvertisement({}, ad({ rssi: -70 }), 1000, { detect: noTracker });
+      devices = upsertAdvertisement(devices, ad({ rssi: 127 }), 1000 + RSSI_SMOOTHING_MS + 1, {
+        detect: noTracker,
+      });
+      expect(devices['AA:BB:CC:DD:EE:FF'].rssi).toBe(-70);
+    });
+
+    it('starts with an empty history and a null rssi when the first advertisement has no RSSI', () => {
       const devices = upsertAdvertisement({}, ad({ rssi: null }), 1, { detect: noTracker });
       expect(devices['AA:BB:CC:DD:EE:FF'].rssiHistory).toEqual([]);
+      expect(devices['AA:BB:CC:DD:EE:FF'].rssi).toBeNull();
     });
 
     it('keeps readings of 0 dBm', () => {
@@ -167,34 +181,102 @@ describe('upsertAdvertisement', () => {
 
     it(`caps history at ${DEFAULT_HISTORY_LIMIT} samples by default, dropping the oldest`, () => {
       let devices: DeviceMap = {};
+      const step = DEFAULT_MIN_SAMPLE_INTERVAL_MS;
       for (let i = 0; i < DEFAULT_HISTORY_LIMIT + 15; i++) {
-        devices = upsertAdvertisement(devices, ad({ rssi: -50 - (i % 40) }), i, { detect: noTracker });
+        devices = upsertAdvertisement(devices, ad({ rssi: -50 - (i % 40) }), i * step, { detect: noTracker });
       }
       const history = devices['AA:BB:CC:DD:EE:FF'].rssiHistory;
       expect(history).toHaveLength(DEFAULT_HISTORY_LIMIT);
-      expect(history[0].t).toBe(15);
-      expect(history[history.length - 1].t).toBe(DEFAULT_HISTORY_LIMIT + 14);
+      expect(history[0].t).toBe(15 * step);
+      expect(history[history.length - 1].t).toBe((DEFAULT_HISTORY_LIMIT + 14) * step);
     });
 
     it('honours a custom history limit', () => {
       let devices: DeviceMap = {};
       for (let i = 0; i < 5; i++) {
-        devices = upsertAdvertisement(devices, ad({ rssi: -60 - i }), i, { historyLimit: 3, detect: noTracker });
+        devices = upsertAdvertisement(devices, ad({ rssi: -60 - i }), i * 1000, {
+          historyLimit: 3,
+          detect: noTracker,
+        });
       }
       expect(devices['AA:BB:CC:DD:EE:FF'].rssiHistory).toEqual([
-        { t: 2, rssi: -62 },
-        { t: 3, rssi: -63 },
-        { t: 4, rssi: -64 },
+        { t: 2000, rssi: -62 },
+        { t: 3000, rssi: -63 },
+        { t: 4000, rssi: -64 },
       ]);
     });
 
     it('trims an existing history when the limit shrinks', () => {
       let devices: DeviceMap = {};
       for (let i = 0; i < 5; i++) {
-        devices = upsertAdvertisement(devices, ad({ rssi: -60 }), i, { detect: noTracker });
+        devices = upsertAdvertisement(devices, ad({ rssi: -60 }), i * 1000, { detect: noTracker });
       }
-      devices = upsertAdvertisement(devices, ad({ rssi: null }), 5, { historyLimit: 2, detect: noTracker });
-      expect(devices['AA:BB:CC:DD:EE:FF'].rssiHistory.map((s) => s.t)).toEqual([3, 4]);
+      devices = upsertAdvertisement(devices, ad({ rssi: null }), 5000, { historyLimit: 2, detect: noTracker });
+      expect(devices['AA:BB:CC:DD:EE:FF'].rssiHistory.map((s) => s.t)).toEqual([3000, 4000]);
+    });
+
+    it('keeps about one sample per second however often a device advertises', () => {
+      let devices: DeviceMap = {};
+      for (let i = 0; i < 200; i++) {
+        devices = upsertAdvertisement(devices, ad({ rssi: -60 }), i * 100, { detect: noTracker });
+      }
+      const times = devices['AA:BB:CC:DD:EE:FF'].rssiHistory.map((sample) => sample.t);
+      expect(times).toHaveLength(20);
+      expect(times[0]).toBe(0);
+      expect(times[times.length - 1]).toBe(19_000);
+      for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBe(1000);
+    });
+
+    it('averages readings that fall into the same sample, keeping its time', () => {
+      let devices = upsertAdvertisement({}, ad({ rssi: -60 }), 1000, { detect: noTracker });
+      devices = upsertAdvertisement(devices, ad({ rssi: -70 }), 1400, { detect: noTracker });
+      expect(devices['AA:BB:CC:DD:EE:FF'].rssiHistory).toEqual([{ t: 1000, rssi: -65 }]);
+      devices = upsertAdvertisement(devices, ad({ rssi: -50 }), 2000, { detect: noTracker });
+      expect(devices['AA:BB:CC:DD:EE:FF'].rssiHistory).toEqual([
+        { t: 1000, rssi: -65 },
+        { t: 2000, rssi: -50 },
+      ]);
+    });
+
+    it('honours a custom minimum sample interval', () => {
+      let devices: DeviceMap = {};
+      for (let i = 0; i < 4; i++) {
+        devices = upsertAdvertisement(devices, ad({ rssi: -60 }), i * 100, {
+          minSampleIntervalMs: 0,
+          detect: noTracker,
+        });
+      }
+      expect(devices['AA:BB:CC:DD:EE:FF'].rssiHistory.map((s) => s.t)).toEqual([0, 100, 200, 300]);
+    });
+  });
+
+  describe('smoothed rssi', () => {
+    it('is the mean of the samples from the last few seconds, rounded to whole dBm', () => {
+      let devices: DeviceMap = {};
+      const readings = [-40, -80, -61, -70];
+      readings.forEach((rssi, i) => {
+        devices = upsertAdvertisement(devices, ad({ rssi }), i * 1000, { detect: noTracker });
+      });
+      // At t=3000 all four samples (0, 1000, 2000, 3000) are inside the window.
+      expect(devices['AA:BB:CC:DD:EE:FF'].rssi).toBe(Math.round((-40 - 80 - 61 - 70) / 4));
+      devices = upsertAdvertisement(devices, ad({ rssi: -60 }), 4000, { detect: noTracker });
+      // The sample at 0 has dropped out of the window.
+      expect(devices['AA:BB:CC:DD:EE:FF'].rssi).toBe(Math.round((-80 - 61 - 70 - 60) / 4));
+    });
+
+    it('does not jump with every packet when readings alternate', () => {
+      let devices: DeviceMap = {};
+      const seen: (number | null)[] = [];
+      for (let i = 0; i < 100; i++) {
+        devices = upsertAdvertisement(devices, ad({ rssi: i % 2 === 0 ? -50 : -70 }), i * 100, {
+          detect: noTracker,
+        });
+        if (i >= 40) seen.push(devices['AA:BB:CC:DD:EE:FF'].rssi);
+      }
+      for (const rssi of seen) {
+        expect(rssi).toBeGreaterThanOrEqual(-65);
+        expect(rssi).toBeLessThanOrEqual(-55);
+      }
     });
 
     it('keeps no history with a limit of 0', () => {

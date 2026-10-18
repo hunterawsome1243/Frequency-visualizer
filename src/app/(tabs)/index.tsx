@@ -1,6 +1,6 @@
-import { useRouter } from 'expo-router';
+import { useIsFocused, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { type LayoutChangeEvent, Platform, StyleSheet, Text, View } from 'react-native';
+import { type LayoutChangeEvent, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Radar } from '@/components/radar';
@@ -10,16 +10,20 @@ import { StateView } from '@/components/state-view';
 import { BottomTabInset, glow, MaxContentWidth, Neon, ProximityColors, Spacing } from '@/constants/theme';
 import { useNicknames } from '@/context/nicknames-context';
 import { useScan } from '@/context/scan-context';
+import { useFrozenWhileBlurred } from '@/hooks/use-frozen-while-blurred';
+import { blePermissionNote } from '@/lib/scanner';
 
 /** Keeps the radar from getting huge on tablets and wide browser windows. */
 const MAX_RADAR_SIZE = 560;
+/** With large text the screen scrolls rather than squeezing the radar below this height. */
+const MIN_RADAR_AREA_HEIGHT = 220;
 
 export const RADAR_CAPTION =
   'Closer to the centre = stronger signal. Signal strength is only a rough guide to distance.';
 
 const EMPTY_MESSAGE =
   'Tap Start scan to look for Bluetooth devices around you. The radar shows Bluetooth Low Energy devices ' +
-  "that are sending signals right now. Your phone can't sense other kinds of radio waves, and nothing is " +
+  "that are sending signals right now. The app can't see other kinds of radio signals, and nothing is " +
   'uploaded.';
 
 const LEGEND = [
@@ -36,16 +40,25 @@ function plural(count: number, one: string, many: string): string {
 export default function RadarScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { devices, status, isScanning } = useScan();
+  const scan = useScan();
+  const { status, isScanning } = scan;
+  const focused = useIsFocused();
+  // Tabs stay mounted: while another tab or the detail screen is showing, keep the last picture
+  // instead of redrawing (and animating) every dot on each update.
+  const devices = useFrozenWhileBlurred(scan.devices);
   const { nicknames } = useNicknames();
   const [area, setArea] = useState({ width: 0, height: 0 });
 
   const trackerCount = devices.filter((device) => device.tracker !== null).length;
   const size = Math.max(0, Math.floor(Math.min(area.width, area.height, MAX_RADAR_SIZE)));
   const showEmpty = status === 'idle' && devices.length === 0;
+  const permissionNote = blePermissionNote();
+  const emptyMessage = permissionNote ? `${EMPTY_MESSAGE} ${permissionNote}` : EMPTY_MESSAGE;
 
-  // No scroll view here, so the radar can fill the space between the header and the button. iOS draws the
-  // tab bar over the screen, so it needs room at the bottom; Android already lays the screen out above it.
+  // The radar fills the space between the header and the button, and the screen only scrolls when that
+  // space gets too small (large text, small phones). iOS draws the tab bar over the screen, so it needs
+  // room at the bottom; Android already lays the screen out above it. The scroll view does not add the
+  // insets itself (contentInsetAdjustmentBehavior "never"), so they are not counted twice.
   const platformPadding = Platform.select({
     ios: { paddingTop: insets.top + Spacing.two, paddingBottom: insets.bottom + BottomTabInset + Spacing.two },
     android: {
@@ -70,7 +83,11 @@ export default function RadarScreen() {
   };
 
   return (
-    <View style={[styles.screen, platformPadding]}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[styles.content, platformPadding]}
+      contentInsetAdjustmentBehavior="never"
+      alwaysBounceVertical={false}>
       <View style={styles.inner}>
         <View style={styles.header}>
           <Text style={styles.title} accessibilityRole="header">
@@ -105,7 +122,7 @@ export default function RadarScreen() {
           {showEmpty ? (
             <StateView
               title="Nothing on the radar yet"
-              message={EMPTY_MESSAGE}
+              message={emptyMessage}
               style={styles.empty}
               testID="radar-empty"
             />
@@ -115,7 +132,7 @@ export default function RadarScreen() {
               nicknames={nicknames}
               onSelect={openDevice}
               size={size}
-              sweeping={isScanning}
+              sweeping={isScanning && focused}
               testID="radar"
             />
           )}
@@ -143,16 +160,19 @@ export default function RadarScreen() {
 
         <ScanButton />
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+    backgroundColor: Neon.background,
+  },
+  content: {
+    flexGrow: 1,
     flexDirection: 'row',
     justifyContent: 'center',
-    backgroundColor: Neon.background,
   },
   inner: {
     flex: 1,
@@ -185,7 +205,7 @@ const styles = StyleSheet.create({
   },
   radarArea: {
     flex: 1,
-    minHeight: 0,
+    minHeight: MIN_RADAR_AREA_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
   },
