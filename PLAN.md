@@ -15,6 +15,7 @@ Goal: The app opens on your phone and shows its first screen.
 
 - [ ] Create an Expo app in this folder (S) <!-- id:tyk6y9k8wp97 -->
   Notes: First run git init, unless this folder is already in git. Create it in a temporary folder so CLAUDE.md is kept: run npx create-expo-app@latest expo-tmp --yes --no-agents-md, move everything from expo-tmp into this folder (including hidden files such as .gitignore, but not a .git folder, and never replacing CLAUDE.md or anything in .claude), delete expo-tmp, then set the app name in app.json and package.json. Do not start the dev server: tell me to run npx expo start in a second terminal myself and scan its QR code with Expo Go. On an iPhone, Expo Go only opens it when I am logged in to the same free Expo account on both (npx expo login on the computer); if the phone is not on the same Wi-Fi, use npx expo start --tunnel. Check: the starter app opens on my phone.
+  Notes: Created 2026-10-18 in a cloud session; the Android bundle builds (npx expo export). Not yet opened on a phone: tick this once it opens in Expo Go.
 - [ ] Replace the starter screens with the app's real layout (M) <!-- id:tb1hluepwp97 -->
   Notes: Check: every screen opens from the navigation on your phone.
 - [ ] Set up Jest with jest-expo and one passing test (M) <!-- id:t8va36zjwp97 -->
